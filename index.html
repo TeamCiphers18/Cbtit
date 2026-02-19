@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeByt Cryptographic Terminal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        body {
+            background-color: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        #terminal-page {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+        }
+        .terminal-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .terminal-header {
+            border-bottom: 1px solid #4da6ff;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            background: #111;
+        }
+        .terminal-title {
+            color: #4da6ff;
+            font-weight: bold;
+        }
+        .terminal-status {
+            display: flex;
+            gap: 15px;
+            color: #66b0ff;
+            font-size: 12px;
+        }
+        .terminal-body-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            padding-bottom: 60px;
+        }
+        .line-numbers {
+            width: 40px;
+            background: #111;
+            border-right: 1px solid #4da6ff;
+            color: #66b0ff;
+            padding: 5px;
+            text-align: right;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .terminal-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        .output-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .prompt {
+            color: #4da6ff;
+            font-weight: bold;
+        }
+        .terminal-input-section {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #111;
+            border-top: 1px solid #4da6ff;
+            padding: 10px;
+        }
+        .input-line {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .input-line input {
+            background: #222;
+            border: 1px solid #4da6ff;
+            color: #fff;
+            padding: 5px 10px;
+            flex: 1;
+            font-family: 'Courier New', monospace;
+            border-radius: 3px;
+        }
+        .input-line input:focus {
+            outline: none;
+            border-color: #66b0ff;
+        }
+        .error-output { color: #ff6b6b; }
+        .success-output { color: #4ade80; }
+        .info-output { color: #60a5fa; }
+        .system-output { color: #9ca3af; }
+        .key-output { color: #9d4edd; }
+        .file-btn {
+            background: #222;
+            border: 1px solid #4da6ff;
+            color: #4da6ff;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 5px;
+        }
+        .file-btn:hover {
+            background: #333;
+        }
+        .key-status {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .key-status.active {
+            background: #1a3a1a;
+            color: #4ade80;
+            border: 1px solid #4ade80;
+        }
+        .key-status.inactive {
+            background: #3a1a1a;
+            color: #ff6b6b;
+            border: 1px solid #ff6b6b;
+        }
+        .hamburger-btn {
+            background: none;
+            border: none;
+            color: #4da6ff;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100vh;
+            background: #111;
+            border-right: 2px solid #4da6ff;
+            transition: left 0.3s;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .sidebar.open {
+            left: 0;
+        }
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            color: #4da6ff;
+            border-bottom: 1px solid #4da6ff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .sidebar-close {
+            background: none;
+            border: none;
+            color: #4da6ff;
+            font-size: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal-page">
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <div class="terminal-title">
+                    <i class="fas fa-terminal"></i> CODEBYT CRYPTO TERMINAL
+                </div>
+                <div class="terminal-status">
+                    <button class="hamburger-btn" id="sidebar-toggle"><i class="fas fa-bars"></i></button>
+                    <span id="response-time">0ms</span>
+                    <div class="key-status inactive" id="key-status">
+                        <i class="fas fa-key"></i> NOT LOGGED IN
+                    </div>
+                </div>
+            </div>
+            
+            <div style="padding: 5px;">
+                <button class="file-btn" id="upload-btn"><i class="fas fa-upload"></i> Upload</button>
+                <button class="file-btn" id="download-btn" disabled><i class="fas fa-download"></i> Download</button>
+                <input type="file" id="file-input" style="display:none;">
+            </div>
+            
+            <div class="terminal-body-container">
+                <div class="line-numbers" id="line-numbers">1</div>
+                <div class="terminal-output" id="terminal-output"></div>
+            </div>
+            
+            <div class="terminal-input-section">
+                <div class="input-line">
+                    <span class="prompt">root@codebyt:~#</span>
+                    <input type="text" id="terminal-input" autocomplete="off" placeholder="Type help">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span>DASHBOARD</span>
+            <button class="sidebar-close" id="sidebar-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="sidebar-content"></div>
+    </div>
+
+    <script>
+        // ==================== SUPABASE SETUP ====================
+        const supabase = window.supabase.createClient(
+            'https://ujjbduaqvxtlanbsjswi.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqamJkdWFxdnh0bGFuYnNqc3dpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODk1NTMsImV4cCI6MjA4NzA2NTU1M30.2sarKX2GSioxGmmal39m_FuWzxdgZ9eGS5jVzB7En38'
+        );
+
+        // ==================== STATE ====================
+        const state = {
+            user: null,
+            session: null,
+            currentKey: null,
+            commandHistory: [],
+            historyIndex: -1
+        };
+
+        // ==================== UI FUNCTIONS ====================
+        function displayOutput(text, type = 'system-output') {
+            const output = document.getElementById('terminal-output');
+            const line = document.createElement('div');
+            line.className = 'output-line ' + type;
+            line.textContent = text;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+            updateLineNumbers();
+        }
+
+        function displayInput(command) {
+            const output = document.getElementById('terminal-output');
+            const line = document.createElement('div');
+            line.className = 'output-line';
+            line.innerHTML = `<span class="prompt">root@codebyt:~#</span> ${command}`;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function updateLineNumbers() {
+            const lines = document.querySelectorAll('.output-line').length;
+            const nums = document.getElementById('line-numbers');
+            nums.innerHTML = '';
+            for (let i = 1; i <= lines; i++) {
+                nums.innerHTML += i + '<br>';
+            }
+        }
+
+        function updateKeyStatus() {
+            const status = document.getElementById('key-status');
+            if (!state.user) {
+                status.className = 'key-status inactive';
+                status.innerHTML = '<i class="fas fa-key"></i> NOT LOGGED IN';
+            } else if (!state.currentKey) {
+                status.className = 'key-status inactive';
+                status.innerHTML = '<i class="fas fa-key"></i> NO KEY';
+            } else {
+                status.className = 'key-status active';
+                status.innerHTML = '<i class="fas fa-key"></i> KEY ACTIVE';
+            }
+        }
+
+        // ==================== AUTH ====================
+        async function login(email, password) {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email, password
+            });
+            if (error) throw error;
+            state.user = data.user;
+            state.session = data.session;
+            return data.user;
+        }
+
+        async function register(email, password) {
+            const { data, error } = await supabase.auth.signUp({
+                email, password
+            });
+            if (error) throw error;
+            return data.user;
+        }
+
+        async function logout() {
+            await supabase.auth.signOut();
+            state.user = null;
+            state.session = null;
+            state.currentKey = null;
+            updateKeyStatus();
+        }
+
+        // ==================== COMMANDS ====================
+        const commands = {
+            help: {
+                exec: function() {
+                    displayOutput('=== AVAILABLE COMMANDS ===', 'info-output');
+                    displayOutput('help                    - Show this help', 'system-output');
+                    displayOutput('register email pass     - Create account', 'system-output');
+                    displayOutput('login email pass        - Login', 'system-output');
+                    displayOutput('logout                  - Logout', 'system-output');
+                    displayOutput('genkey                  - Generate key', 'system-output');
+                    displayOutput('keyinfo                 - Show key info', 'system-output');
+                    displayOutput('encode text             - Encrypt text', 'system-output');
+                    displayOutput('decode text             - Decrypt text', 'system-output');
+                    displayOutput('clear                   - Clear screen', 'system-output');
+                }
+            },
+
+            register: {
+                exec: async function(args) {
+                    if (args.length < 2) {
+                        displayOutput('Usage: register email password', 'error-output');
+                        return;
+                    }
+                    try {
+                        await register(args[0], args[1]);
+                        displayOutput('Account created! Check your email.', 'success-output');
+                    } catch (err) {
+                        displayOutput('Error: ' + err.message, 'error-output');
+                    }
+                }
+            },
+
+            login: {
+                exec: async function(args) {
+                    if (args.length < 2) {
+                        displayOutput('Usage: login email password', 'error-output');
+                        return;
+                    }
+                    try {
+                        await login(args[0], args[1]);
+                        displayOutput('Login successful!', 'success-output');
+                        updateKeyStatus();
+                    } catch (err) {
+                        displayOutput('Error: ' + err.message, 'error-output');
+                    }
+                }
+            },
+
+            logout: {
+                exec: async function() {
+                    await logout();
+                    displayOutput('Logged out', 'success-output');
+                }
+            },
+
+            genkey: {
+                exec: async function() {
+                    if (!state.user) {
+                        displayOutput('Please login first', 'error-output');
+                        return;
+                    }
+                    const fingerprint = Math.random().toString(36).substring(2, 10);
+                    state.currentKey = { id: 'key_123', fingerprint: fingerprint };
+                    displayOutput('Key generated!', 'success-output');
+                    displayOutput('Fingerprint: ' + fingerprint, 'key-output');
+                    updateKeyStatus();
+                }
+            },
+
+            keyinfo: {
+                exec: function() {
+                    if (!state.currentKey) {
+                        displayOutput('No key selected', 'info-output');
+                        return;
+                    }
+                    displayOutput('Key ID: ' + state.currentKey.id, 'key-output');
+                    displayOutput('Fingerprint: ' + state.currentKey.fingerprint, 'info-output');
+                }
+            },
+
+            encode: {
+                exec: function(args) {
+                    if (!state.currentKey) {
+                        displayOutput('Generate a key first', 'error-output');
+                        return;
+                    }
+                    const text = args.join(' ');
+                    const encoded = btoa(text);
+                    displayOutput('Encrypted: ' + encoded, 'encode-output');
+                }
+            },
+
+            decode: {
+                exec: function(args) {
+                    const text = args.join(' ');
+                    try {
+                        const decoded = atob(text);
+                        displayOutput('Decrypted: ' + decoded, 'decode-output');
+                    } catch {
+                        displayOutput('Invalid encoded text', 'error-output');
+                    }
+                }
+            },
+
+            clear: {
+                exec: function() {
+                    document.getElementById('terminal-output').innerHTML = '';
+                    updateLineNumbers();
+                }
+            }
+        };
+
+        // ==================== INPUT HANDLER ====================
+        document.getElementById('terminal-input').addEventListener('keypress', async function(e) {
+            if (e.key === 'Enter') {
+                const cmd = this.value.trim();
+                if (!cmd) return;
+                
+                displayInput(cmd);
+                this.value = '';
+                
+                const parts = cmd.split(' ');
+                const command = parts[0].toLowerCase();
+                const args = parts.slice(1);
+                
+                const start = performance.now();
+                
+                if (commands[command]) {
+                    try {
+                        await commands[command].exec(args);
+                    } catch (err) {
+                        displayOutput('Error: ' + err.message, 'error-output');
+                    }
+                } else {
+                    displayOutput('Unknown command: ' + command, 'error-output');
+                }
+                
+                document.getElementById('response-time').textContent = 
+                    (performance.now() - start).toFixed(1) + 'ms';
+            }
+        });
+
+        // ==================== FILE HANDLING ====================
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            if (e.target.files[0]) {
+                displayOutput('File uploaded: ' + e.target.files[0].name, 'success-output');
+            }
+        });
+
+        // ==================== SIDEBAR ====================
+        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.add('open');
+        });
+        
+        document.getElementById('sidebar-close').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.remove('open');
+        });
+
+        // ==================== INIT ====================
+        displayOutput('=== CODEBYT CRYPTO TERMINAL ===', 'info-output');
+        displayOutput('Type "help" for commands', 'system-output');
+        displayOutput('', 'system-output');
+        
+        // Check for existing session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                state.user = session.user;
+                state.session = session;
+                updateKeyStatus();
+                displayOutput('Welcome back, ' + session.user.email, 'success-output');
+            }
+        });
+    </script>
+</body>
+</html>
